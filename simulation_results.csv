@@ -1,0 +1,2 @@
+Job ID,L,w_f,E1_FRP,E2_FRP,nu12_FRP,G12_FRP,G13_FRP,G23_FRP,rho_FRP,rho_m,C10_m,D1_m,rho_t,E_t,nu_t,t_t,t_FRP,layup,meshSize,prestress,uz_pull,cpus,Radius,Has_Inflection,Is_Tristable
+0,100.0,12.7,222000.0,7010.0,0.314,4661.0,4661.0,2540.0,1.2e-09,1e-09,30.972,0.0,1.2e-09,1.0,0.3,0.13,0.04,"[0, 90, 0]",2.54,6.0,8.0,1,75.28921758391579,True,False

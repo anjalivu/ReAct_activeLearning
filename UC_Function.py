@@ -4,10 +4,16 @@ from abaqus import *
 from abaqusConstants import *
 import __main__
 import numpy as np
-from inputParams import *  # Import all parameters
 import time
 
-def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP, rho_m, C10_m, D1_m, rho_t, E_t, nu_t, t_t, t_FRP, layup, meshSize, prestress, uz_pull, cpus):
+def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP, rho_m, C10_m, D1_m, rho_t, E_t, nu_t, t_t, t_FRP, layup, meshSize, prestress, uz_pull, cpus, job_id):
+    """
+    UC Model function for Abaqus simulation.
+    
+    Returns:
+        radius (float): Fitted cylinder radius
+        has_inflection (bool): Whether the geometry has inflection points (not tristable if True)
+    """
     import section
     import regionToolset
     import displayGroupMdbToolset as dgm
@@ -502,7 +508,7 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
         'ALLSE', 'ALLSD', 'ALLWK', 'ETOTAL'), frequency=1)
     
     # create analysis job
-    job_name = 'Job-1'
+    job_name = f'Job_{job_id}' #make unique job name based on prestress level
     mdb.Job(name=job_name, model='Model-1', description='', type=ANALYSIS, 
         atTime=None, waitMinutes=0, waitHours=0, queue=None, memory=90, 
         memoryUnits=PERCENTAGE, getMemoryFromAnalysis=True, 
@@ -525,313 +531,236 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
     # -------------------------------------------------------------------------------------
     # JOB STATUS CHECK
     # -------------------------------------------------------------------------------------
-    # Open CSV file for writing
-    csv_file = job_name + '_results.csv'
-    with open(csv_file, 'w') as f:
-        
-        # ===== JOB STATUS CHECK =====
-        f.write('\n')
-        f.write(f"Simulation Time (seconds),{elapsed_time:.2f}\n")
-        f.write('Section,Job Status Check\n')
-        
-        # open odb
-        odb_path = job_name + '.odb'
-        odb = odbAccess.openOdb(path=odb_path)
-        
-        # Check if simulation reached 3s in the 'Release' step
-        if 'Release' in odb.steps and len(odb.steps['Release'].frames) > 0:
-            release_step = odb.steps['Release']
-            last_frame = release_step.frames[-1]
-            simulation_complete = last_frame.frameValue >= 1.0
-        
-            if simulation_complete:
-                f.write(f'Status, Simulation complete\n')
-            else:
-                f.write(f'Status, WARNING: Simulation did not complete, data will not be extracted \n')
-        else: 
-            simulation_complete = False 
-            f.write(f'Status, WARNING: Simulation did not complete, data will not be extracted \n')
-        # -------------------------------------------------------------------------------------
-        # DATA EXTRACTION: ONLY IF SIMULATION CONVERGED
-        # -------------------------------------------------------------------------------------
-        if simulation_complete:
-            # -------------------------------------------------------------------------------------
-            # ENERGY CHECK FOR VALIDITY OF RESULTS
-            # -------------------------------------------------------------------------------------
-            f.write('\n')
-            f.write('Section, Energy Data Extraction\n')
-            
-            # Get history region (whole model)
-            step_key = odb.steps.keys()[-1]
-            hist_region = odb.steps[step_key].historyRegions['Assembly ASSEMBLY']
-            
-            # Extract energy data
-            kinetic_energy = hist_region.historyOutputs['ALLKE'].data
-            strain_energy = hist_region.historyOutputs['ALLSE'].data
-            artificial_energy = hist_region.historyOutputs['ALLAE'].data
-            static_dissipation = hist_region.historyOutputs['ALLSD'].data
-            
-            f.write('Info,Energy history data extracted successfully\n')
-            
-            # Convert to arrays
-            ke_values = np.array([point[1] for point in kinetic_energy])
-            se_values = np.array([point[1] for point in strain_energy])
-            ae_values = np.array([point[1] for point in artificial_energy])
-            sd_values = np.array([point[1] for point in static_dissipation])
-            
-            # Calculate ratios at each time step
-            f.write('\n')
-            f.write('Section,Energy Ratio Analysis\n')
-            
-            # Avoid division by zero
-            se_nonzero = np.where(se_values != 0, se_values, 1e-10)
-            
-            ke_se_ratio = ke_values / se_nonzero
-            ae_se_ratio = ae_values / se_nonzero
-            sd_se_ratio = sd_values / se_nonzero
-            
-            # Find maximum ratios
-            max_ke_ratio = np.max(ke_se_ratio)
-            max_ae_ratio = np.max(ae_se_ratio)
-            max_sd_ratio = np.max(sd_se_ratio)
-            
-            f.write('Metric,Value\n')
-            f.write(f'Maximum Kinetic Energy / Strain Energy ratio,{max_ke_ratio:.6f}\n')
-            f.write(f'Maximum Artificial Energy / Strain Energy ratio,{max_ae_ratio:.6f}\n')
-            f.write(f'Maximum Static Dissipation / Strain Energy ratio,{max_sd_ratio:.6f}\n')
-            
-            # Recommendations based on ratios
-            f.write('\n')
-            f.write('Section,Analysis Recommendations\n')
-            
-            if max_ke_ratio > 0.1:
-                f.write('Warning,High kinetic energy ratio (>10%). Consider increasing the step time of step shape forming.\n')
-            else:
-                f.write('OK,Kinetic energy ratio is acceptable\n')
-                
-            if max_ae_ratio > 0.05:
-                f.write('Warning,High artificial energy ratio (>5%).\n')
-            else:
-                f.write('OK,Artificial energy ratio is acceptable\n')
-                
-            if max_sd_ratio > 0.1:
-                f.write('Warning,High static dissipation ratio (>10%). Consider reducing damping in step pull corners.\n\n')
-            else:
-                f.write('OK,Static dissipation energy ratio is acceptable\n\n')
     
-            # -------------------------------------------------------------------------------------
-            # TRISTABILITY CHECK
-            # -------------------------------------------------------------------------------------
-            # Currently done by looking for inflection points on fram strips
-                
-            # Get last frame from Release step
-            last_frame = odb.steps['Release'].frames[-1]
+    # open odb
+    odb_path = job_name + '.odb'
+    odb = odbAccess.openOdb(path=odb_path)
+    
+    # Check if simulation reached completion in the 'Release' step
+    if 'Release' in odb.steps and len(odb.steps['Release'].frames) > 0:
+        release_step = odb.steps['Release']
+        last_frame = release_step.frames[-1]
+        simulation_complete = last_frame.frameValue >= 1.0
+    else: 
+        simulation_complete = False 
+    
+    # -------------------------------------------------------------------------------------
+    # DATA EXTRACTION: ONLY IF SIMULATION CONVERGED
+    # -------------------------------------------------------------------------------------
+    if simulation_complete:
+        # -------------------------------------------------------------------------------------
+        # ENERGY CHECK FOR VALIDITY OF RESULTS
+        # -------------------------------------------------------------------------------------
+        
+        # Get history region (whole model)
+        step_key = odb.steps.keys()[-1]
+        hist_region = odb.steps[step_key].historyRegions['Assembly ASSEMBLY']
+        
+        # Extract energy data
+        kinetic_energy = hist_region.historyOutputs['ALLKE'].data
+        strain_energy = hist_region.historyOutputs['ALLSE'].data
+        artificial_energy = hist_region.historyOutputs['ALLAE'].data
+        static_dissipation = hist_region.historyOutputs['ALLSD'].data
+        
+        # Convert to arrays
+        ke_values = np.array([point[1] for point in kinetic_energy])
+        se_values = np.array([point[1] for point in strain_energy])
+        ae_values = np.array([point[1] for point in artificial_energy])
+        sd_values = np.array([point[1] for point in static_dissipation])
+        
+        # Calculate ratios at each time step
+        # Avoid division by zero
+        se_nonzero = np.where(se_values != 0, se_values, 1e-10)
+        
+        ke_se_ratio = ke_values / se_nonzero
+        ae_se_ratio = ae_values / se_nonzero
+        sd_se_ratio = sd_values / se_nonzero
+        
+        # Find maximum ratios
+        max_ke_ratio = np.max(ke_se_ratio)
+        max_ae_ratio = np.max(ae_se_ratio)
+        max_sd_ratio = np.max(sd_se_ratio)
+        
+        # -------------------------------------------------------------------------------------
+        # TRISTABILITY CHECK
+        # -------------------------------------------------------------------------------------
+        # Currently done by looking for inflection points on frame strips
+            
+        # Get last frame from Release step
+        last_frame = odb.steps['Release'].frames[-1]
 
-            # Get displacement field for specific instance
-            instance = odb.rootAssembly.instances['FRAME-1']
-            U = last_frame.fieldOutputs['U'].getSubset(region=instance)
+        # Get displacement field for specific instance
+        instance = odb.rootAssembly.instances['FRAME-1']
+        U = last_frame.fieldOutputs['U'].getSubset(region=instance)
 
-            # Check for inflection points at 4 boundaries
-            conditions = [
-                ('x', -0.5*L),
-                ('x', 0.5*L),
-                ('y', -0.5*L),
-                ('y', 0.5*L)
-            ]
+        # Check for inflection points at 4 boundaries
+        conditions = [
+            ('x', -0.5*L),
+            ('x', 0.5*L),
+            ('y', -0.5*L),
+            ('y', 0.5*L)
+        ]
 
-            has_inflection = False
+        has_inflection = False
 
-            for coord_name, coord_value in conditions:
-                coord_idx = 0 if coord_name == 'x' else 1
-                
-                # Find nodes at this boundary and extract deformed coordinates
-                deformed_coords = []
-                for value in U.values:
-                    node = instance.nodes[value.nodeLabel - 1]  # nodeLabel is 1-indexed
-                    if abs(node.coordinates[coord_idx] - coord_value) < 1e-2:
-                        deformed = [node.coordinates[i] + value.data[i] for i in range(3)]
-                        deformed_coords.append(deformed)
-                
-                """# Write to file
-                if len(deformed_coords) > 0:
-                    deformed_coords_array = np.array(deformed_coords)
-                    f.write(f"\n{coord_name}={coord_value} boundary:\n")
-                    for coord in deformed_coords_array:
-                        f.write(f"{coord[0]:.6f},{coord[1]:.6f},{coord[2]:.6f}\n")"""
-                
-                # Check for inflection if we have enough points
-                if len(deformed_coords) > 3:
-                    deformed_coords = np.array(deformed_coords)
-                    
-                    # Sort by z-coordinate
-                    sort_idx = np.argsort(deformed_coords[:, 2])
-                    sorted_coords = deformed_coords[sort_idx]
-                    
-                    # Get the other coordinate
-                    z = sorted_coords[:, 2]
-                    other = sorted_coords[:, 1] if coord_name == 'x' else sorted_coords[:, 0]
-                    
-                    # Compute second derivative
-                    d_dz = np.gradient(other, z)
-                    d2_dz2 = np.gradient(d_dz, z)
-                    
-                    # Find inflection points
-                    sign_changes = np.diff(np.sign(d2_dz2))
-                    if np.any(sign_changes != 0):
-                        has_inflection = True
-                        break
+        for coord_name, coord_value in conditions:
+            coord_idx = 0 if coord_name == 'x' else 1
             
-            if has_inflection:
-                f.write(f'TRISTABILITY CHECK: Geometry is not Tristable\n')
-            else:
-                f.write(f'TRISTABILITY CHECK: Geometry is Tristable\n')
-            
-            # -------------------------------------------------------------------------------------
-            # CYLINDER FIT
-            # -------------------------------------------------------------------------------------
-            # cylinder of best fit - this is done even if geometry not tristable
-            
-            # Extract deformed coordinates at last frame of simulation
-            last_step_key = odb.steps.keys()[-1]
-            last_step = odb.steps[last_step_key]
-            last_frame = last_step.frames[-1]
-            
-            # Get displacement field
-            displacement_field = last_frame.fieldOutputs['U']
-            
-            # Get all instances in the assembly
-            assembly = odb.rootAssembly
-            
-            # Open deformed coordinates CSV file
-            coords_file = job_name + '_deformed_coordinates.csv'
-            
-            # Store coordinates for cylinder fitting
+            # Find nodes at this boundary and extract deformed coordinates
             deformed_coords = []
+            for value in U.values:
+                node = instance.nodes[value.nodeLabel - 1]  # nodeLabel is 1-indexed
+                if abs(node.coordinates[coord_idx] - coord_value) < 1e-2:
+                    deformed = [node.coordinates[i] + value.data[i] for i in range(3)]
+                    deformed_coords.append(deformed)
             
-            with open(coords_file, 'w') as f:
-                f.write('Node_Label,X_deformed,Y_deformed,Z_deformed\n')
+            # Check for inflection if we have enough points
+            if len(deformed_coords) > 3:
+                deformed_coords = np.array(deformed_coords)
                 
-                # Loop through all displacement values
-                for value in displacement_field.values:
-                    node_label = value.nodeLabel
-                    
-                    # Get the instance name and node
-                    # The value.instance gives us the instance this node belongs to
-                    instance = value.instance
-                    
-                    # Access the node from the instance
-                    node = instance.nodes[node_label - 1]  # Node labels start at 1, index at 0
-                    
-                    # Get original coordinates
-                    x_orig = node.coordinates[0]
-                    y_orig = node.coordinates[1]
-                    z_orig = node.coordinates[2]
-                    
-                    # Get displacements
-                    u1 = value.data[0]
-                    u2 = value.data[1]
-                    u3 = value.data[2]
-                    
-                    # Calculate deformed coordinates
-                    x_def = x_orig + u1
-                    y_def = y_orig + u2
-                    z_def = z_orig + u3
-                    
-                    f.write(f'{node_label},{x_def:.6e},{y_def:.6e},{z_def:.6e}\n')
-                    
-                    # Store for cylinder fitting
-                    deformed_coords.append([x_def, y_def, z_def])
-                    
-            
-            # deformed_coords is assumed to exist and have shape (N, 3)
-            points = np.asarray(deformed_coords, dtype=float)
-            N = points.shape[0]
-
-            # Axis direction via covariance PCA 
-            centroid = points.mean(axis=0)
-            X = points - centroid
-            cov = np.dot(X.T, X) / N
-
-            eigvals, eigvecs = np.linalg.eigh(cov)
-            axis_dir = eigvecs[:, np.argmax(eigvals)]
-            axis_dir /= np.linalg.norm(axis_dir)
-
-            # Build orthonormal basis for cross-section plane
-            # Choose any vector not parallel to axis
-            ref = np.array([1.0, 0.0, 0.0])
-            if abs(np.dot(ref, axis_dir)) > 0.9:
-                ref = np.array([0.0, 1.0, 0.0])
-
-            e1 = np.cross(axis_dir, ref)
-            e1 /= np.linalg.norm(e1)
-            e2 = np.cross(axis_dir, e1)
-            
-            # Project points onto plane normal to axis
-            proj = points - np.outer(np.dot(points - centroid, axis_dir), axis_dir)
-
-            x2d = np.dot(proj - centroid, e1)
-            y2d = np.dot(proj - centroid, e2)
-
-            # Algebraic circle fit (Taubin-style, NumPy-only)
-            x = x2d
-            y = y2d
-
-            x_m = x.mean()
-            y_m = y.mean()
-
-            u = x - x_m
-            v = y - y_m
-
-            Su2 = np.sum(u**2)
-            Sv2 = np.sum(v**2)
-            Suv = np.sum(u*v)
-            Su3 = np.sum(u**3)
-            Sv3 = np.sum(v**3)
-            Su2v = np.sum(u**2 * v)
-            Suv2 = np.sum(u * v**2)
-
-            A = np.array([[Su2, Suv],
-                          [Suv, Sv2]])
-
-            B = 0.5 * np.array([Su3 + Suv2,
-                                Sv3 + Su2v])
-
-            uc, vc = np.linalg.solve(A, B)
-
-            xc = x_m + uc
-            yc = y_m + vc
-
-            radius = np.sqrt((u - uc)**2 + (v - vc)**2).mean()
-            
-            axis_point = centroid + xc * e1 + yc * e2
-
-            # Goodness-of-fit
-            dist = np.sqrt((x - xc)**2 + (y - yc)**2)
-            residuals = dist - radius
-
-            rmse = np.sqrt(np.mean(residuals**2))
-            mae = np.mean(np.abs(residuals))
-            max_error = np.max(np.abs(residuals))
-
-
-            # 5. Write results to csv
-            csv_file = job_name + '_cylinder_fit.csv'
-            with open(csv_file, 'w') as f:
-                f.write("axis_dir_x,{:.8f}\n".format(axis_dir[0]))
-                f.write("axis_dir_y,{:.8f}\n".format(axis_dir[1]))
-                f.write("axis_dir_z,{:.8f}\n".format(axis_dir[2]))
+                # Sort by z-coordinate
+                sort_idx = np.argsort(deformed_coords[:, 2])
+                sorted_coords = deformed_coords[sort_idx]
                 
-                f.write(f"axis_point_x,{axis_point[0]:.8f}\n")
-                f.write(f"axis_point_y,{axis_point[1]:.8f}\n")
-                f.write(f"axis_point_z,{axis_point[2]:.8f}\n")
+                # Get the other coordinate
+                z = sorted_coords[:, 2]
+                other = sorted_coords[:, 1] if coord_name == 'x' else sorted_coords[:, 0]
+                
+                # Compute second derivative
+                d_dz = np.gradient(other, z)
+                d2_dz2 = np.gradient(d_dz, z)
+                
+                # Find inflection points
+                sign_changes = np.diff(np.sign(d2_dz2))
+                if np.any(sign_changes != 0):
+                    has_inflection = True
+                    break
+        
+        # -------------------------------------------------------------------------------------
+        # CYLINDER FIT
+        # -------------------------------------------------------------------------------------
+        # cylinder of best fit - this is done even if geometry not tristable
+        
+        # Extract deformed coordinates at last frame of simulation
+        last_step_key = odb.steps.keys()[-1]
+        last_step = odb.steps[last_step_key]
+        last_frame = last_step.frames[-1]
+        
+        # Get displacement field
+        displacement_field = last_frame.fieldOutputs['U']
+        
+        # Get all instances in the assembly
+        assembly = odb.rootAssembly
+        
+        # Store coordinates for cylinder fitting
+        deformed_coords = []
+        
+        # Loop through all displacement values
+        for value in displacement_field.values:
+            node_label = value.nodeLabel
+            
+            # Get the instance name and node
+            # The value.instance gives us the instance this node belongs to
+            instance = value.instance
+            
+            # Access the node from the instance
+            node = instance.nodes[node_label - 1]  # Node labels start at 1, index at 0
+            
+            # Get original coordinates
+            x_orig = node.coordinates[0]
+            y_orig = node.coordinates[1]
+            z_orig = node.coordinates[2]
+            
+            # Get displacements
+            u1 = value.data[0]
+            u2 = value.data[1]
+            u3 = value.data[2]
+            
+            # Calculate deformed coordinates
+            x_def = x_orig + u1
+            y_def = y_orig + u2
+            z_def = z_orig + u3
+            
+            # Store for cylinder fitting
+            deformed_coords.append([x_def, y_def, z_def])
+        
+        # deformed_coords is assumed to exist and have shape (N, 3)
+        points = np.asarray(deformed_coords, dtype=float)
+        N = points.shape[0]
 
-                f.write("radius,{:.8f}\n".format(radius))
+        # Axis direction via covariance PCA 
+        centroid = points.mean(axis=0)
+        X = points - centroid
+        cov = np.dot(X.T, X) / N
 
-                f.write("rmse,{:.8f}\n".format(rmse))
-                f.write("mae,{:.8f}\n".format(mae))
-                f.write("max_abs_error,{:.8f}\n".format(max_error))
+        eigvals, eigvecs = np.linalg.eigh(cov)
+        axis_dir = eigvecs[:, np.argmax(eigvals)]
+        axis_dir /= np.linalg.norm(axis_dir)
 
+        # Build orthonormal basis for cross-section plane
+        # Choose any vector not parallel to axis
+        ref = np.array([1.0, 0.0, 0.0])
+        if abs(np.dot(ref, axis_dir)) > 0.9:
+            ref = np.array([0.0, 1.0, 0.0])
 
+        e1 = np.cross(axis_dir, ref)
+        e1 /= np.linalg.norm(e1)
+        e2 = np.cross(axis_dir, e1)
+        
+        # Project points onto plane normal to axis
+        proj = points - np.outer(np.dot(points - centroid, axis_dir), axis_dir)
 
-if __name__ == '__main__':
-    UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP, rho_m, C10_m, D1_m, rho_t, E_t, nu_t, t_t, t_FRP, layup, meshSize, prestress, uz_pull, cpus)
+        x2d = np.dot(proj - centroid, e1)
+        y2d = np.dot(proj - centroid, e2)
+
+        # Algebraic circle fit (Taubin-style, NumPy-only)
+        x = x2d
+        y = y2d
+
+        x_m = x.mean()
+        y_m = y.mean()
+
+        u = x - x_m
+        v = y - y_m
+
+        Su2 = np.sum(u**2)
+        Sv2 = np.sum(v**2)
+        Suv = np.sum(u*v)
+        Su3 = np.sum(u**3)
+        Sv3 = np.sum(v**3)
+        Su2v = np.sum(u**2 * v)
+        Suv2 = np.sum(u * v**2)
+
+        A = np.array([[Su2, Suv],
+                      [Suv, Sv2]])
+
+        B = 0.5 * np.array([Su3 + Suv2,
+                            Sv3 + Su2v])
+
+        uc, vc = np.linalg.solve(A, B)
+
+        xc = x_m + uc
+        yc = y_m + vc
+
+        radius = np.sqrt((u - uc)**2 + (v - vc)**2).mean()
+        
+        axis_point = centroid + xc * e1 + yc * e2
+
+        # Goodness-of-fit
+        dist = np.sqrt((x - xc)**2 + (y - yc)**2)
+        residuals = dist - radius
+
+        rmse = np.sqrt(np.mean(residuals**2))
+        mae = np.mean(np.abs(residuals))
+        max_error = np.max(np.abs(residuals))
+    
+    else:
+        # If simulation did not complete, return None values
+        radius = None
+        has_inflection = None
+    
+    # Close ODB
+    odb.close()
+    
+    # Return the two requested values
+    return radius, has_inflection
