@@ -7,8 +7,9 @@ import numpy as np
 from inputParams import *  # Import all parameters
 import time
 import os
+import sys
 
-def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP, rho_m, C10_m, D1_m, rho_t, E_t, nu_t, t_t, t_FRP, layup, meshSize, prestress, uz_pull, cpus):
+def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP, rho_m, C10_m, D1_m, rho_t, E_t, nu_t, t_t, t_FRP, layup, meshSize, prestress, uz_pull, cpus, job_id):
     import section
     import regionToolset
     import displayGroupMdbToolset as dgm
@@ -471,17 +472,16 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
         initialInc=0.1, minInc=1e-09, nohaf=OFF, amplitude=RAMP, alpha=DEFAULT, # Initial increment value change?
         initialConditions=OFF, nlgeom=ON)
 
-    # pull corners to transition to cylindrical step, static general, automatic stabilization
-    mdb.models['Model-1'].StaticStep(name='pullCorners', previous='ShapeForming', 
-        maxNumInc=10000, stabilizationMagnitude=2e-06, 
-        stabilizationMethod=DISSIPATED_ENERGY_FRACTION, 
-        continueDampingFactors=False, adaptiveDampingRatio=0.01, 
-        initialInc=0.01, minInc=1e-09) # really small initial increment
+    # pull corners to transition to cylindrical step, implicit dynamic quasi-static
+    mdb.models['Model-1'].ImplicitDynamicsStep(name='pullCorners', 
+        previous='ShapeForming', maxNumInc=10000, application=QUASI_STATIC, 
+        initialInc=0.01, minInc=1e-09, nohaf=OFF, amplitude=RAMP, alpha=DEFAULT, 
+        initialConditions=OFF, nlgeom=ON)
         
     verts1 = v.getByBoundingBox(-0.5*L + w_f - 0.1, -0.5*L + w_f - 0.1, -0.1, -0.5*L + w_f + 0.1, -0.5*L + w_f + 0.1, 0.1)
     verts2 = v.getByBoundingBox(0.5*L - w_f - 0.1, 0.5*L - w_f - 0.1, -0.1, 0.5*L - w_f + 0.1, 0.5*L - w_f + 0.1, 0.1)
     region = a.Set(vertices=verts1+verts2, name='pullingNodes')
-    
+
     mdb.models['Model-1'].DisplacementBC(name='pullCorners', 
         createStepName='pullCorners', region=region, u1=UNSET, u2=UNSET, 
         u3=uz_pull, ur1=UNSET, ur2=UNSET, ur3=UNSET, amplitude=UNSET, fixed=OFF, 
@@ -494,18 +494,17 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
         initialConditions=OFF, nlgeom=ON)
         
     mdb.models['Model-1'].boundaryConditions['pullCorners'].deactivate('Release')
-    
+
     # output requests
     mdb.models['Model-1'].FieldOutputRequest(name='F-Output-2', 
         createStepName='ShapeForming', variables=('S', 'SE', 'U'), frequency=1)
     mdb.models['Model-1'].HistoryOutputRequest(name='H-Output-2', 
         createStepName='ShapeForming', variables=('ALLAE', 'ALLIE', 'ALLKE', 
         'ALLSE', 'ALLSD', 'ALLWK', 'ETOTAL'), frequency=1)
-    
     # -------------------------------------------------------------------------------------
     # CREATE OUTPUT FOLDER
     # -------------------------------------------------------------------------------------
-    job_name = 'Job-1'
+    job_name = job_id
     output_folder = os.path.join(os.getcwd(), job_name)
     
     # Create folder if it doesn't exist
@@ -861,4 +860,9 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
 
 
 if __name__ == '__main__':
-    UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP, rho_m, C10_m, D1_m, rho_t, E_t, nu_t, t_t, t_FRP, layup, meshSize, prestress, uz_pull, cpus)
+    if '--' in sys.argv:
+        script_args = sys.argv[sys.argv.index('--') + 1:]
+        job_id = script_args[0]
+    else:
+        job_id = 'default_job_af'
+    UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP, rho_m, C10_m, D1_m, rho_t, E_t, nu_t, t_t, t_FRP, layup, meshSize, prestress, uz_pull, cpus, job_id)
