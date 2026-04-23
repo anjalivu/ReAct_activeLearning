@@ -1,0 +1,23 @@
+Analysis initiated from SIMULIA established products
+Abaqus JOB Job-1
+Abaqus 2024
+Successfully checked out SRU/15 from DSLS server swlic3.stanford.edu
+Abaqus License Manager checked out the following licenses:
+Abaqus checked out 15 tokens from DSLS server swlic3.stanford.edu.
+<1290 out of 1320 licenses remain available>.
+Begin Analysis Input File Processor
+4/22/2026 6:08:24 PM
+Run pre.exe
+4/22/2026 6:08:28 PM
+End Analysis Input File Processor
+Begin Abaqus/Standard Analysis
+4/22/2026 6:08:28 PM
+Run standard.exe
+4/22/2026 6:10:38 PM
+End Abaqus/Standard Analysis
+Begin SIM Wrap-up
+4/22/2026 6:10:39 PM
+Run SMASimUtility.exe
+4/22/2026 6:10:39 PM
+End SIM Wrap-up
+Abaqus JOB Job-1 COMPLETED

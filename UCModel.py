@@ -6,6 +6,7 @@ import __main__
 import numpy as np
 from inputParams import *  # Import all parameters
 import time
+import os
 
 def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP, rho_m, C10_m, D1_m, rho_t, E_t, nu_t, t_t, t_FRP, layup, meshSize, prestress, uz_pull, cpus):
     import section
@@ -467,7 +468,7 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
     # Shape forming step, implicit dynamic quasi-static NLGEOM
     mdb.models['Model-1'].ImplicitDynamicsStep(name='ShapeForming', 
         previous='Initial', maxNumInc=10000, application=QUASI_STATIC, 
-        initialInc=0.1, minInc=1e-09, nohaf=OFF, amplitude=RAMP, alpha=DEFAULT, 
+        initialInc=0.1, minInc=1e-09, nohaf=OFF, amplitude=RAMP, alpha=DEFAULT, # Initial increment value change?
         initialConditions=OFF, nlgeom=ON)
 
     # pull corners to transition to cylindrical step, static general, automatic stabilization
@@ -475,7 +476,7 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
         maxNumInc=10000, stabilizationMagnitude=2e-06, 
         stabilizationMethod=DISSIPATED_ENERGY_FRACTION, 
         continueDampingFactors=False, adaptiveDampingRatio=0.01, 
-        initialInc=0.01, minInc=1e-09)
+        initialInc=0.01, minInc=1e-09) # really small initial increment
         
     verts1 = v.getByBoundingBox(-0.5*L + w_f - 0.1, -0.5*L + w_f - 0.1, -0.1, -0.5*L + w_f + 0.1, -0.5*L + w_f + 0.1, 0.1)
     verts2 = v.getByBoundingBox(0.5*L - w_f - 0.1, 0.5*L - w_f - 0.1, -0.1, 0.5*L - w_f + 0.1, 0.5*L - w_f + 0.1, 0.1)
@@ -501,8 +502,18 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
         createStepName='ShapeForming', variables=('ALLAE', 'ALLIE', 'ALLKE', 
         'ALLSE', 'ALLSD', 'ALLWK', 'ETOTAL'), frequency=1)
     
-    # create analysis job
+    # -------------------------------------------------------------------------------------
+    # CREATE OUTPUT FOLDER
+    # -------------------------------------------------------------------------------------
     job_name = 'Job-1'
+    output_folder = os.path.join(os.getcwd(), job_name)
+    
+    # Create folder if it doesn't exist
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+    
+    # create analysis job
+ # create analysis job (NO directory parameter)
     mdb.Job(name=job_name, model='Model-1', description='', type=ANALYSIS, 
         atTime=None, waitMinutes=0, waitHours=0, queue=None, memory=90, 
         memoryUnits=PERCENTAGE, getMemoryFromAnalysis=True, 
@@ -510,13 +521,22 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
         modelPrint=OFF, contactPrint=OFF, historyPrint=OFF, userSubroutine='', 
         scratch='', resultsFormat=ODB, numThreadsPerMpiProcess=1, 
         multiprocessingMode=DEFAULT, numCpus=cpus, numDomains=cpus, numGPUs=0)
-        
+
+    # Save current working directory
+    original_dir = os.getcwd()
+
+    # Change to output folder before running job
+    os.chdir(output_folder)
+
     # run job and wait for completion
     my_job = mdb.jobs[job_name]
     start_time = time.time()
     my_job.submit()
     my_job.waitForCompletion()
     elapsed_time = time.time() - start_time
+
+    # Change back to original directory for the rest of the script
+    os.chdir(original_dir)
     
     # -------------------------------------------------------------------------------------
     # EXTRACT RESULTS
@@ -525,8 +545,8 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
     # -------------------------------------------------------------------------------------
     # JOB STATUS CHECK
     # -------------------------------------------------------------------------------------
-    # Open CSV file for writing
-    csv_file = job_name + '_results.csv'
+    # Open CSV file for writing in the output folder
+    csv_file = os.path.join(output_folder, job_name + '_results.csv')
     with open(csv_file, 'w') as f:
         
         # ===== JOB STATUS CHECK =====
@@ -535,7 +555,7 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
         f.write('Section,Job Status Check\n')
         
         # open odb
-        odb_path = job_name + '.odb'
+        odb_path = os.path.join(output_folder, job_name + '.odb')
         odb = odbAccess.openOdb(path=odb_path)
         
         # Check if simulation reached 3s in the 'Release' step
@@ -652,12 +672,12 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
                         deformed = [node.coordinates[i] + value.data[i] for i in range(3)]
                         deformed_coords.append(deformed)
                 
-                """# Write to file
-                if len(deformed_coords) > 0:
-                    deformed_coords_array = np.array(deformed_coords)
-                    f.write(f"\n{coord_name}={coord_value} boundary:\n")
-                    for coord in deformed_coords_array:
-                        f.write(f"{coord[0]:.6f},{coord[1]:.6f},{coord[2]:.6f}\n")"""
+                # # Write to file
+                # if len(deformed_coords) > 0:
+                #     deformed_coords_array = np.array(deformed_coords)
+                #     f.write(f"\n{coord_name}={coord_value} boundary:\n")
+                #     for coord in deformed_coords_array:
+                #         f.write(f"{coord[0]:.6f},{coord[1]:.6f},{coord[2]:.6f}\n")
                 
                 # Check for inflection if we have enough points
                 if len(deformed_coords) > 3:
@@ -670,10 +690,17 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
                     # Get the other coordinate
                     z = sorted_coords[:, 2]
                     other = sorted_coords[:, 1] if coord_name == 'x' else sorted_coords[:, 0]
-                    
-                    # Compute second derivative
-                    d_dz = np.gradient(other, z)
-                    d2_dz2 = np.gradient(d_dz, z)
+                    def moving_average(data, window_size):
+                        return np.convolve(data, np.ones(window_size)/window_size, mode='valid')
+
+                    # Smooth the coordinates
+                    window = 3  # Adjust this (larger = more smoothing)
+                    other_smooth = moving_average(other, window)
+                    z_smooth = moving_average(z, window)
+
+                    # Calculate derivatives on smoothed data
+                    d_dz = np.gradient(other_smooth, z_smooth)
+                    d2_dz2 = np.gradient(d_dz, z_smooth)
                     
                     # Find inflection points
                     sign_changes = np.diff(np.sign(d2_dz2))
@@ -702,8 +729,8 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
             # Get all instances in the assembly
             assembly = odb.rootAssembly
             
-            # Open deformed coordinates CSV file
-            coords_file = job_name + '_deformed_coordinates.csv'
+            # Open deformed coordinates CSV file in the output folder
+            coords_file = os.path.join(output_folder, job_name + '_deformed_coordinates.csv')
             
             # Store coordinates for cylinder fitting
             deformed_coords = []
@@ -814,9 +841,9 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
             max_error = np.max(np.abs(residuals))
 
 
-            # 5. Write results to csv
-            csv_file = job_name + '_cylinder_fit.csv'
-            with open(csv_file, 'w') as f:
+            # 5. Write results to csv in the output folder
+            cylinder_file = os.path.join(output_folder, job_name + '_cylinder_fit.csv')
+            with open(cylinder_file, 'w') as f:
                 f.write("axis_dir_x,{:.8f}\n".format(axis_dir[0]))
                 f.write("axis_dir_y,{:.8f}\n".format(axis_dir[1]))
                 f.write("axis_dir_z,{:.8f}\n".format(axis_dir[2]))

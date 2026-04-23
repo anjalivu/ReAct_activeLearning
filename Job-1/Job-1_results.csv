@@ -1,0 +1,20 @@
+
+Simulation Time (seconds),159.44
+Section,Job Status Check
+Status, Simulation complete
+
+Section, Energy Data Extraction
+Info,Energy history data extracted successfully
+
+Section,Energy Ratio Analysis
+Metric,Value
+Maximum Kinetic Energy / Strain Energy ratio,0.000005
+Maximum Artificial Energy / Strain Energy ratio,0.002184
+Maximum Static Dissipation / Strain Energy ratio,0.022241
+
+Section,Analysis Recommendations
+OK,Kinetic energy ratio is acceptable
+OK,Artificial energy ratio is acceptable
+OK,Static dissipation energy ratio is acceptable
+
+TRISTABILITY CHECK: Geometry is Tristable
