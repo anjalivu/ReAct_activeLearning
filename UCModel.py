@@ -9,7 +9,7 @@ import time
 import os
 import sys
 
-def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP, rho_m, C10_m, D1_m, rho_t, E_t, nu_t, t_t, t_FRP, layup, meshSize, prestress, uz_pull, cpus, job_id):
+def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP, rho_m, C10_m, D1_m, rho_t, E_t, nu_t, t_t, t_FRP, layup, meshSize, prestress, uz_pull, cpus, job_name):
     import section
     import regionToolset
     import displayGroupMdbToolset as dgm
@@ -504,13 +504,15 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
     # -------------------------------------------------------------------------------------
     # CREATE OUTPUT FOLDER
     # -------------------------------------------------------------------------------------
-    job_name = job_id
-    output_folder = os.path.join(os.getcwd(), job_name)
-    
-    # Create folder if it doesn't exist
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-    
+    # Create timestamp string
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+
+    # Create folder name with timestamp
+    output_folder = os.path.join(os.getcwd(), job_name + '_' + timestamp)
+
+    # Create the folder (will be unique each time)
+    os.makedirs(output_folder)
+        
     # create analysis job
  # create analysis job (NO directory parameter)
     mdb.Job(name=job_name, model='Model-1', description='', type=ANALYSIS, 
@@ -862,7 +864,7 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
 if __name__ == '__main__':
     if '--' in sys.argv:
         script_args = sys.argv[sys.argv.index('--') + 1:]
-        job_id = script_args[0]
+        job_name = script_args[0]
     else:
-        job_id = 'default_job_af'
-    UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP, rho_m, C10_m, D1_m, rho_t, E_t, nu_t, t_t, t_FRP, layup, meshSize, prestress, uz_pull, cpus, job_id)
+        job_name = 'default_job'
+    UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP, rho_m, C10_m, D1_m, rho_t, E_t, nu_t, t_t, t_FRP, layup, meshSize, prestress, uz_pull, cpus, job_name)

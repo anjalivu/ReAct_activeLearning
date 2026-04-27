@@ -3,14 +3,32 @@ from inputParams import *  # Your parameter file
 import csv
 import os
 
-prestresses = [6.0, 6.01, 6.02]
-for job_id in range(len(prestresses)):
-    prestress = prestresses[job_id]
-    # Call the function
+L_mean = L
+w_f_mean = w_f
+t_t_mean = t_t
+t_FRP_mean = t_FRP
+prestress_mean = prestress
+
+N = 10 # Number of simulations to run
+stdev_factor = .25
+
+for job_id in range(N):
+
+    # add randomness to parameters
+    L = np.random.normal(L_mean, L_mean * stdev_factor) 
+    w_f = np.random.normal(w_f_mean, w_f_mean * stdev_factor)  
+    t_t = np.random.normal(t_t_mean, t_t_mean * stdev_factor)  
+    t_FRP = np.random.normal(t_FRP_mean, t_FRP_mean * stdev_factor) 
+    prestress = np.random.normal(prestress_mean, prestress_mean * stdev_factor)  
+
+    # Create unique job name for each simulation
+    job_name = f'Job-{job_id}'
+
+    # Call the function with unique job name
     radius, has_inflection = UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, 
                                     G13_FRP, G23_FRP, rho_FRP, rho_m, C10_m, D1_m, 
                                     rho_t, E_t, nu_t, t_t, t_FRP, layup, meshSize, 
-                                    prestress, uz_pull, cpus, job_id)
+                                    prestress, uz_pull, cpus, job_name)
 
     # Check results
     print(f"Cylinder radius: {radius}")
@@ -21,7 +39,7 @@ for job_id in range(len(prestresses)):
     file_exists = os.path.isfile(csv_filename)
     
     with open(csv_filename, 'a', newline='') as csvfile:
-        fieldnames = ['Job ID','L', 'w_f', 'E1_FRP', 'E2_FRP', 'nu12_FRP', 'G12_FRP', 
+        fieldnames = ['Job_ID','L', 'w_f', 'E1_FRP', 'E2_FRP', 'nu12_FRP', 'G12_FRP', 
                     'G13_FRP', 'G23_FRP', 'rho_FRP', 'rho_m', 'C10_m', 'D1_m', 
                     'rho_t', 'E_t', 'nu_t', 't_t', 't_FRP', 'layup', 'meshSize', 
                     'prestress', 'uz_pull', 'cpus', 'Radius', 'Has_Inflection', 'Is_Tristable']
@@ -34,7 +52,7 @@ for job_id in range(len(prestresses)):
         
         # Write results
         writer.writerow({
-            'Job ID': job_id,
+            'Job_ID': job_id,
             'L': L,
             'w_f': w_f,
             'E1_FRP': E1_FRP,
@@ -63,3 +81,17 @@ for job_id in range(len(prestresses)):
         })
     
     print(f"Results saved to {csv_filename}")
+    
+    # Clean up all files except .odb
+    cleanup_extensions = ['.dat', '.msg', '.sta', '.com', '.prt', '.sim', '.log', '.lck']
+    
+    for ext in cleanup_extensions:
+        filename = job_name + ext
+        if os.path.exists(filename):
+            try:
+                os.remove(filename)
+                print(f"Removed {filename}")
+            except Exception as e:
+                print(f"Could not remove {filename}: {e}")
+    
+    print(f"Cleanup complete for {job_name}. ODB file retained.\n")

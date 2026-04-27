@@ -5,7 +5,7 @@ import numpy as np
 
 # model geometry
 L = 100.0
-w_f = 8.0
+w_f = 12.7
 
 # Material properties
 #FRP

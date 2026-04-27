@@ -6,7 +6,7 @@ import __main__
 import numpy as np
 import time
 
-def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP, rho_m, C10_m, D1_m, rho_t, E_t, nu_t, t_t, t_FRP, layup, meshSize, prestress, uz_pull, cpus, job_id):
+def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP, rho_m, C10_m, D1_m, rho_t, E_t, nu_t, t_t, t_FRP, layup, meshSize, prestress, uz_pull, cpus, job_name='Job-1'):
     """
     UC Model function for Abaqus simulation.
     
@@ -476,17 +476,16 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
         initialInc=0.1, minInc=1e-09, nohaf=OFF, amplitude=RAMP, alpha=DEFAULT, 
         initialConditions=OFF, nlgeom=ON)
 
-    # pull corners to transition to cylindrical step, static general, automatic stabilization
-    mdb.models['Model-1'].StaticStep(name='pullCorners', previous='ShapeForming', 
-        maxNumInc=10000, stabilizationMagnitude=2e-06, 
-        stabilizationMethod=DISSIPATED_ENERGY_FRACTION, 
-        continueDampingFactors=False, adaptiveDampingRatio=0.01, 
-        initialInc=0.01, minInc=1e-09)
+    # pull corners to transition to cylindrical step, implicit dynamic quasi-static
+    mdb.models['Model-1'].ImplicitDynamicsStep(name='pullCorners', 
+        previous='ShapeForming', maxNumInc=10000, application=QUASI_STATIC, 
+        initialInc=0.01, minInc=1e-09, nohaf=OFF, amplitude=RAMP, alpha=DEFAULT, 
+        initialConditions=OFF, nlgeom=ON)
         
     verts1 = v.getByBoundingBox(-0.5*L + w_f - 0.1, -0.5*L + w_f - 0.1, -0.1, -0.5*L + w_f + 0.1, -0.5*L + w_f + 0.1, 0.1)
     verts2 = v.getByBoundingBox(0.5*L - w_f - 0.1, 0.5*L - w_f - 0.1, -0.1, 0.5*L - w_f + 0.1, 0.5*L - w_f + 0.1, 0.1)
     region = a.Set(vertices=verts1+verts2, name='pullingNodes')
-    
+
     mdb.models['Model-1'].DisplacementBC(name='pullCorners', 
         createStepName='pullCorners', region=region, u1=UNSET, u2=UNSET, 
         u3=uz_pull, ur1=UNSET, ur2=UNSET, ur3=UNSET, amplitude=UNSET, fixed=OFF, 
@@ -499,7 +498,7 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
         initialConditions=OFF, nlgeom=ON)
         
     mdb.models['Model-1'].boundaryConditions['pullCorners'].deactivate('Release')
-    
+
     # output requests
     mdb.models['Model-1'].FieldOutputRequest(name='F-Output-2', 
         createStepName='ShapeForming', variables=('S', 'SE', 'U'), frequency=1)
@@ -508,7 +507,6 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
         'ALLSE', 'ALLSD', 'ALLWK', 'ETOTAL'), frequency=1)
     
     # create analysis job
-    job_name = f'Job_{job_id}' #make unique job name based on prestress level
     mdb.Job(name=job_name, model='Model-1', description='', type=ANALYSIS, 
         atTime=None, waitMinutes=0, waitHours=0, queue=None, memory=90, 
         memoryUnits=PERCENTAGE, getMemoryFromAnalysis=True, 
@@ -516,7 +514,7 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
         modelPrint=OFF, contactPrint=OFF, historyPrint=OFF, userSubroutine='', 
         scratch='', resultsFormat=ODB, numThreadsPerMpiProcess=1, 
         multiprocessingMode=DEFAULT, numCpus=cpus, numDomains=cpus, numGPUs=0)
-        
+
     # run job and wait for completion
     my_job = mdb.jobs[job_name]
     start_time = time.time()
@@ -626,9 +624,17 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
                 z = sorted_coords[:, 2]
                 other = sorted_coords[:, 1] if coord_name == 'x' else sorted_coords[:, 0]
                 
-                # Compute second derivative
-                d_dz = np.gradient(other, z)
-                d2_dz2 = np.gradient(d_dz, z)
+                # Smooth the coordinates with moving average
+                def moving_average(data, window_size):
+                    return np.convolve(data, np.ones(window_size)/window_size, mode='valid')
+
+                window = 3  # Adjust this (larger = more smoothing)
+                other_smooth = moving_average(other, window)
+                z_smooth = moving_average(z, window)
+
+                # Calculate derivatives on smoothed data
+                d_dz = np.gradient(other_smooth, z_smooth)
+                d2_dz2 = np.gradient(d_dz, z_smooth)
                 
                 # Find inflection points
                 sign_changes = np.diff(np.sign(d2_dz2))
