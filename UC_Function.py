@@ -479,7 +479,7 @@ def UCModel(L, w_f, E1_FRP, E2_FRP, nu12_FRP, G12_FRP, G13_FRP, G23_FRP, rho_FRP
     # pull corners to transition to cylindrical step, implicit dynamic quasi-static
     mdb.models['Model-1'].ImplicitDynamicsStep(name='pullCorners', 
         previous='ShapeForming', maxNumInc=10000, application=QUASI_STATIC, 
-        initialInc=0.01, minInc=1e-09, nohaf=OFF, amplitude=RAMP, alpha=DEFAULT, 
+        initialInc=0.01, minInc=1e-09, nohaf=OFF, amplitude=RAMP, alpha=DEFAULT, #CHANGED THIS FROM 0.1 TO 0.05 TO GO FAST
         initialConditions=OFF, nlgeom=ON)
         
     verts1 = v.getByBoundingBox(-0.5*L + w_f - 0.1, -0.5*L + w_f - 0.1, -0.1, -0.5*L + w_f + 0.1, -0.5*L + w_f + 0.1, 0.1)
